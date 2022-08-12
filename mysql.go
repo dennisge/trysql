@@ -179,7 +179,7 @@ func (sb *MySqlSession) Done() error {
 
 func (sb *MySqlSession) DoneInsertIdContext(ctx context.Context, _ string) (int64, error) {
 	sqlText, args := sb.builderSQLText()
-	if logSqlEnabled {
+	if sb.logSql {
 		logSql(sqlText, args)
 	}
 	result, err := sb.baseSqlSession.ExecContext(ctx, sqlText, args...)
@@ -228,9 +228,22 @@ func (sb *MySqlSession) AsPrimitiveContext(ctx context.Context, dest any) error 
 func (sb *MySqlSession) AsPrimitive(dest any) error {
 	return sb.AsPrimitiveContext(context.Background(), dest)
 }
+func (sb *MySqlSession) AsPrimitiveListContext(ctx context.Context, dest any) error {
+
+	sqlText, args := sb.builderSQLText()
+	return sb.baseSqlSession.AsPrimitiveListContext(ctx, sqlText, args, dest)
+}
+func (sb *MySqlSession) AsPrimitiveList(dest any) error {
+	return sb.AsPrimitiveListContext(context.Background(), dest)
+}
 
 func (sb *MySqlSession) Reset() SqlSession {
 	sb.baseSqlSession.Reset()
+	return sb
+}
+
+func (sb *MySqlSession) LogSql(logSql bool) SqlSession {
+	sb.baseSqlSession.logSql = logSql
 	return sb
 }
 

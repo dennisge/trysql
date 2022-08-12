@@ -182,7 +182,7 @@ func (sb *PostgreSqlSession) Done() error {
 func (sb *PostgreSqlSession) DoneInsertIdContext(ctx context.Context, column string) (int64, error) {
 	sqlText, args := sb.builderSQLText()
 	sqlText += "\n RETURNING " + column
-	if logSqlEnabled {
+	if sb.logSql {
 		logSql(sqlText, args)
 	}
 	var id int64
@@ -225,12 +225,18 @@ func (sb *PostgreSqlSession) AsList(dest any) error {
 }
 
 func (sb *PostgreSqlSession) AsPrimitiveContext(ctx context.Context, dest any) error {
-
 	sqlText, args := sb.builderSQLText()
 	return sb.baseSqlSession.AsPrimitiveContext(ctx, sqlText, args, dest)
 }
 func (sb *PostgreSqlSession) AsPrimitive(dest any) error {
 	return sb.AsPrimitiveContext(context.Background(), dest)
+}
+func (sb *PostgreSqlSession) AsPrimitiveListContext(ctx context.Context, dest any) error {
+	sqlText, args := sb.builderSQLText()
+	return sb.baseSqlSession.AsPrimitiveListContext(ctx, sqlText, args, dest)
+}
+func (sb *PostgreSqlSession) AsPrimitiveList(dest any) error {
+	return sb.AsPrimitiveListContext(context.Background(), dest)
 }
 
 func (sb *PostgreSqlSession) InTx(txFunc func() error) error {
@@ -239,6 +245,11 @@ func (sb *PostgreSqlSession) InTx(txFunc func() error) error {
 
 func (sb *PostgreSqlSession) Reset() SqlSession {
 	sb.baseSqlSession.Reset()
+	return sb
+}
+
+func (sb *PostgreSqlSession) LogSql(logSql bool) SqlSession {
+	sb.baseSqlSession.logSql = logSql
 	return sb
 }
 

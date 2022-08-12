@@ -15,7 +15,7 @@ const (
 )
 
 // SqlHandler sql 执行函数 ， ctx 是 Timeout Context
-type SqlHandler func(ctx context.Context, session SqlSession) error
+type SqlHandler func(ctx context.Context, sqlSession SqlSession) error
 
 type SqlSessionFactory interface {
 

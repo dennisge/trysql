@@ -5,14 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/dennisge/trysql/sqltext"
 	"log"
 	"reflect"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/dennisge/trysql/sqltext"
 	"github.com/iancoleman/strcase"
 )
 
@@ -136,7 +135,7 @@ type SqlSession interface {
 	// AsListContext 执行 SQL，dest 是 slice 类型
 	AsListContext(ctx context.Context, dest any) error
 
-	// AsList 执行 SQL，dest 是 slice 类型
+	// AsList 执行 SQL，dest 是 slice of struct 类型
 	AsList(dest any) error
 
 	// AsPrimitiveContext 执行 SQL,dest 是 primitive 类型
@@ -145,8 +144,17 @@ type SqlSession interface {
 	// AsPrimitive 执行 SQL,dest 是 primitive 类型
 	AsPrimitive(dest any) error
 
+	// AsPrimitiveListContext 执行 SQL,dest 是 slice of primitive 类型
+	AsPrimitiveListContext(ctx context.Context, dest any) error
+
+	// AsPrimitiveList 执行 SQL,dest 是 slice of primitive 类型
+	AsPrimitiveList(dest any) error
+
 	// Reset 重置当前 SqlSession 以再次使用
 	Reset() SqlSession
+
+	// LogSql 是否输出 Sql 信息,必须在 SQL 构建执行之前(Done***, As***)调用
+	LogSql(logSql bool) SqlSession
 
 	// DbSession SQL 最终代理到 该 DbSession 执行
 	DbSession
@@ -165,15 +173,11 @@ type baseSqlSession struct {
 	argMap    map[string]any
 	rawSql    []string
 	dbSession DbSession
-}
-
-type sqlScanDest struct {
-	index int
-	dest  any
+	logSql    bool
 }
 
 func newBaseSqlSession(db DbSession) *baseSqlSession {
-	return &baseSqlSession{dbSession: db, sql: sqltext.NewSQL(), argMap: map[string]any{}}
+	return &baseSqlSession{dbSession: db, sql: sqltext.NewSQL(), argMap: map[string]any{}, logSql: logSqlEnabled}
 }
 
 func (bss *baseSqlSession) Select(columns ...string) {
@@ -391,7 +395,7 @@ func (bss *baseSqlSession) DeleteFrom(table string) {
 
 func (bss *baseSqlSession) DoneContext(ctx context.Context, sqlText string, args []any) error {
 	bss.Reset()
-	if logSqlEnabled {
+	if bss.logSql {
 		logSql(sqlText, args)
 	}
 	_, err := bss.dbSession.ExecContext(ctx, sqlText, args...)
@@ -410,7 +414,7 @@ func (bss *baseSqlSession) DoneRowsAffectedContext(ctx context.Context, sqlText 
 	if len(args) == 0 {
 		return 0, errors.New("必须指定 Where 条件")
 	}
-	if logSqlEnabled {
+	if bss.logSql {
 		logSql(sqlText, args)
 	}
 	result, err := bss.dbSession.ExecContext(ctx, sqlText, args...)
@@ -434,7 +438,7 @@ func (bss *baseSqlSession) AsSingleContext(ctx context.Context, sqlText string, 
 	if rp.Kind() != reflect.Ptr {
 		panic("dest must be pointer")
 	}
-	if logSqlEnabled {
+	if bss.logSql {
 		logSql(sqlText, args)
 	}
 	rows, err := bss.dbSession.QueryContext(ctx, sqlText, args...)
@@ -449,22 +453,12 @@ func (bss *baseSqlSession) AsSingleContext(ctx context.Context, sqlText string, 
 		}
 	}(rows)
 
-	scanDest := make([]sqlScanDest, 0)
 	columns, _ := rows.Columns()
-	getDest(rp.Elem(), columns, &scanDest)
-	if len(scanDest) != len(columns) {
-		panic("columns in Rows must have corresponding field in dest")
-	}
 
-	sort.Slice(scanDest, func(i, j int) bool {
-		return scanDest[i].index < scanDest[j].index
-	})
-	finalDest := make([]any, len(columns))
-	for i, sd := range scanDest {
-		finalDest[i] = sd.dest
-	}
+	scanDest := getScanDest(rp.Elem(), columns)
+
 	if rows.Next() {
-		if err := rows.Scan(finalDest...); err != nil {
+		if err := rows.Scan(scanDest...); err != nil {
 			panic(err)
 		}
 	} else {
@@ -501,13 +495,13 @@ func (bss *baseSqlSession) AsListContext(ctx context.Context, sqlText string, ar
 	} else if resultType.Kind() == reflect.Ptr {
 		sliceContentType = resultType.Elem()
 		if sliceContentType.Kind() != reflect.Struct {
-			panic(fmt.Errorf("expected slice content is pointer or struct ], but %T", sliceContentType))
+			panic(fmt.Errorf("expected slice content is pointer or struct, but %T", sliceContentType))
 		}
 	} else {
-		panic(fmt.Errorf("expected slice content is pointer or struct ], but %T", resultType))
+		panic(fmt.Errorf("expected slice content is pointer or struct, but %T", resultType))
 	}
 
-	if logSqlEnabled {
+	if bss.logSql {
 		logSql(sqlText, args)
 	}
 	rows, err := bss.dbSession.QueryContext(ctx, sqlText, args...)
@@ -524,20 +518,10 @@ func (bss *baseSqlSession) AsListContext(ctx context.Context, sqlText string, ar
 	for rows.Next() {
 		// 查询结果切片中的一个元素。
 		rowDest := reflect.New(sliceContentType).Elem()
-		dest := make([]sqlScanDest, 0)
-		getDest(rowDest, columns, &dest)
 
-		if len(dest) != len(columns) {
-			return errors.New("the number of values in dest must be the same as the number of columns in Rows")
-		}
-		sort.Slice(dest, func(i, j int) bool {
-			return dest[i].index < dest[j].index
-		})
-		finalDest := make([]any, len(columns))
-		for i, scanDest := range dest {
-			finalDest[i] = scanDest.dest
-		}
-		err := rows.Scan(finalDest...)
+		scanDest := getScanDest(rowDest, columns)
+
+		err := rows.Scan(scanDest...)
 		if err != nil {
 			return err
 		}
@@ -552,13 +536,24 @@ func (bss *baseSqlSession) AsListContext(ctx context.Context, sqlText string, ar
 	return nil
 }
 
+func getScanDest(rowDest reflect.Value, columns []string) []any {
+	scanDest := make([]any, len(columns))
+	getDest(rowDest, columns, scanDest)
+	for i, dest := range scanDest {
+		if dest == nil {
+			scanDest[i] = &sql.RawBytes{}
+		}
+	}
+	return scanDest
+}
+
 func (bss *baseSqlSession) AsList(sqlText string, args []any, dest any) error {
 	return bss.AsListContext(context.Background(), sqlText, args, dest)
 }
 
 func (bss *baseSqlSession) AsPrimitiveContext(ctx context.Context, sqlText string, args []any, dest any) error {
 	bss.Reset()
-	if logSqlEnabled {
+	if bss.logSql {
 		logSql(sqlText, args)
 	}
 	row := bss.dbSession.QueryRowContext(ctx, sqlText, args...)
@@ -570,6 +565,67 @@ func (bss *baseSqlSession) AsPrimitiveContext(ctx context.Context, sqlText strin
 
 func (bss *baseSqlSession) AsPrimitive(sqlText string, args []any, dest any) error {
 	return bss.AsPrimitiveContext(context.Background(), sqlText, args, dest)
+}
+
+func (bss *baseSqlSession) AsPrimitiveListContext(ctx context.Context, sqlText string, args []any, dest any) error {
+	bss.Reset()
+	if bss.logSql {
+		logSql(sqlText, args)
+	}
+	rows, err := bss.dbSession.QueryContext(ctx, sqlText, args...)
+	if err != nil {
+		return err
+	}
+	defer func(rows *sql.Rows) {
+		err := rows.Close()
+		if err != nil {
+			panic(err)
+		}
+	}(rows)
+
+	value := reflect.ValueOf(dest) // 指向存放查询结果的切片的指针。
+	if value.Kind() != reflect.Ptr {
+		return fmt.Errorf("expected pointer to slice of primitive, but %T", dest)
+	}
+	elemValue := value.Elem()       // 存放查询结果的切片。
+	elemType := value.Type().Elem() // 存放查询结果的切片的类型。
+	if elemType.Kind() != reflect.Slice {
+		panic(fmt.Errorf("expected pointer to slice of primitive, but %T", elemValue))
+	}
+
+	resultType := elemType.Elem() // 存放查询结果的切片的元素的类型。
+	sliceContentType := resultType
+	if uint(resultType.Kind()) <= uint(reflect.Float64) {
+		// 期望的基本类型。
+	} else if resultType.Kind() == reflect.Ptr {
+		sliceContentType = resultType.Elem()
+		if uint(sliceContentType.Kind()) > uint(reflect.Float64) {
+			panic(fmt.Errorf("expected slice content is pointer or struct, but %T", sliceContentType))
+		}
+	} else {
+		panic(fmt.Errorf("expected slice content is pointer or primitive, but %T", resultType))
+	}
+
+	for rows.Next() {
+		// 查询结果切片中的一个元素。
+		rowDest := reflect.New(sliceContentType).Elem()
+		if err := rows.Scan(rowDest.Addr().Interface()); err != nil {
+			return err
+		}
+
+		// 下面的代码使用反射实现 slice := rawSql(slick, newEle) 的效果。
+		if resultType.Kind() == reflect.Pointer {
+			elemValue.Set(reflect.Append(elemValue, rowDest.Addr()))
+		} else {
+			elemValue.Set(reflect.Append(elemValue, rowDest))
+		}
+	}
+
+	return nil
+}
+
+func (bss *baseSqlSession) AsPrimitiveList(sqlText string, args []any, dest []any) error {
+	return bss.AsPrimitiveListContext(context.Background(), sqlText, args, dest)
 }
 
 func isNotZero(value any) bool {
@@ -654,6 +710,7 @@ func (bss *baseSqlSession) Reset() {
 	bss.sql = sqltext.NewSQL()
 	bss.argMap = map[string]any{}
 	bss.rawSql = nil
+	bss.logSql = logSqlEnabled
 }
 
 func logSql(sqlText string, args []any) {
@@ -669,7 +726,7 @@ func logSql(sqlText string, args []any) {
 	log.Printf("----- Parameter -----\n%v", b.String())
 }
 
-func getDest(value reflect.Value, columns []string, dest *[]sqlScanDest) {
+func getDest(value reflect.Value, columns []string, dest []any) {
 	typ := value.Type()
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
@@ -695,9 +752,9 @@ func getDest(value reflect.Value, columns []string, dest *[]sqlScanDest) {
 				for index, name := range columns {
 					if name == fieldName {
 						if v.Kind() == reflect.Pointer {
-							*dest = append(*dest, sqlScanDest{index: index, dest: v.Interface()})
+							dest[index] = v.Interface()
 						} else {
-							*dest = append(*dest, sqlScanDest{index: index, dest: v.Addr().Interface()})
+							dest[index] = v.Addr().Interface()
 						}
 					}
 				}

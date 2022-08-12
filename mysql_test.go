@@ -19,14 +19,18 @@ type Album struct {
 	Quantity   int64
 	HelloWorld string
 	yourName   string
+	CreateTime time.Time
 }
 
 func Test_MYSQL_AsList(t *testing.T) {
-	db, _ := initDB()
+	db, err := initDB()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	var album = make([]Album, 0)
 	newSession := NewTxSession(db, true)
-	err := NewMySqlSession(newSession).Select("r.id, title,artist").
+	err = NewMySqlSession(newSession).Select("r.id, title,artist,create_time").
 		From("album r").
 		Where("artist like #{go}", "你%").
 		AsList(&album)
@@ -50,6 +54,19 @@ func Test_MYSQL_AsSingle(t *testing.T) {
 		AsSingle(&album)
 	fmt.Println(single, album)
 
+}
+
+func Test_MYSQL_AsPrimitiveList(t *testing.T) {
+	db, _ := initDB()
+	var album []int64
+	sqlSession := NewTxSession(db, false)
+	err := NewMySqlSession(sqlSession).Select("carrier_id").
+		From("acc_tracking_result r").Limit(2).
+		AsPrimitiveList(&album)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(album)
 }
 
 func Test_MYSQL_InsertSelective(t *testing.T) {
@@ -87,9 +104,9 @@ func Test_MYSQL_InsertMany(t *testing.T) {
 func Test_MYSQL_InsertWithId(t *testing.T) {
 	db, _ := initDB()
 	ssf := NewSqlSessionFactory(Mysql, db, 300*time.Second, true)
-	sqlSession := ssf.NewTxDbSession()
-	id, err := NewMySqlSession(sqlSession).InsertInto("album").IntoColumns("title,artist,price").
-		IntoValues("1", "2", "3").DoneInsertId("id")
+	sqlSession := ssf.NewSqlSession()
+	id, err := NewMySqlSession(sqlSession).InsertInto("album").IntoColumns("title,artist,price,create_time").
+		IntoValues("1", "2", "3", time.Now()).DoneInsertId("id")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,6 +170,7 @@ func initDB() (*sql.DB, error) {
 		DBName:               config.Database,
 		Collation:            "utf8mb4_bin",
 		AllowNativePasswords: true,
+		ParseTime:            true,
 	}
 	enabledLogSql(true)
 	open, err := sql.Open("mysql", cfg.FormatDSN())
