@@ -121,7 +121,7 @@ func (tx *TxDbSession) InTx(txFunc func() error) error {
 	tdb := tx.DB
 	defer func() {
 		if p := recover(); p != nil {
-			log.Println("found p and rollback:", p)
+			log.Println("found panic and rollback:", p)
 			err := tdb.Rollback()
 			if err != nil {
 				panic(err)
@@ -129,12 +129,9 @@ func (tx *TxDbSession) InTx(txFunc func() error) error {
 			panic(p) // re-throw panic after Rollback
 		} else if err != nil {
 			log.Println("found error and rollback:", err)
-			err := tdb.Rollback()
-			if err != nil {
-				panic(err)
-			} // err is non-nil; don't change it
+			err = tdb.Rollback() // if Rollback returns error update err with commit err
 		} else {
-			log.Println("commit:")
+			log.Println("commit")
 			err = tdb.Commit() // if Commit returns error update err with commit err
 		}
 	}()
