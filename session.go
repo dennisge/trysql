@@ -5,17 +5,17 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/dennisge/trysql/sqltext"
 	"log"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/dennisge/trysql/sqltext"
 	"github.com/iancoleman/strcase"
 )
 
-// SqlSession 用于构建 SQL
+// SqlSession 用于构建 SQL,非线程安全
 type SqlSession interface {
 
 	// Select  构建 Select 查询的列
@@ -127,10 +127,10 @@ type SqlSession interface {
 	DoneRowsAffected() (int64, error)
 
 	// AsSingleContext 执行 SQL，dest 是普通 struct 的引用指针
-	AsSingleContext(ctx context.Context, dest any) bool
+	AsSingleContext(ctx context.Context, dest any) error
 
 	// AsSingle 执行 SQL，dest 是普通 struct 的引用指针
-	AsSingle(dest any) bool
+	AsSingle(dest any) error
 
 	// AsListContext 执行 SQL，dest 是 slice 类型
 	AsListContext(ctx context.Context, dest any) error
@@ -428,29 +428,26 @@ func (bss *baseSqlSession) DoneRowsAffected(sqlText string, args []any) (int64, 
 	return bss.DoneRowsAffectedContext(context.Background(), sqlText, args)
 }
 
-func (bss *baseSqlSession) AsSingleContext(ctx context.Context, sqlText string, args []any, dest any) bool {
+func (bss *baseSqlSession) AsSingleContext(ctx context.Context, sqlText string, args []any, dest any) error {
 	bss.Reset()
 	if dest == nil {
-		panic("scalar value cannot be nil")
+		return fmt.Errorf("scalar value cannot be nil")
 	}
 
 	rp := reflect.ValueOf(dest) // 指向存放查询结果的指针。
 	if rp.Kind() != reflect.Ptr {
-		panic("dest must be pointer")
+		return fmt.Errorf("dest must be pointer")
 	}
 	if bss.logSql {
 		logSql(sqlText, args)
 	}
 	rows, err := bss.dbSession.QueryContext(ctx, sqlText, args...)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	defer func(rows *sql.Rows) {
-		err := rows.Close()
-		if err != nil {
-			panic(err)
-		}
+		err = rows.Close()
 	}(rows)
 
 	columns, _ := rows.Columns()
@@ -459,20 +456,18 @@ func (bss *baseSqlSession) AsSingleContext(ctx context.Context, sqlText string, 
 
 	if rows.Next() {
 		if err := rows.Scan(scanDest...); err != nil {
-			panic(err)
+			return err
 		}
 	} else {
 		err := rows.Err()
-		if err == nil || errors.Is(sql.ErrNoRows, err) {
-			return false
-		} else {
-			panic(err)
+		if err != nil {
+			return err
 		}
 	}
-	return true
+	return err
 }
 
-func (bss *baseSqlSession) AsSingle(sqlText string, args []any, dest any) bool {
+func (bss *baseSqlSession) AsSingle(sqlText string, args []any, dest any) error {
 	return bss.AsSingleContext(context.Background(), sqlText, args, dest)
 
 }
@@ -485,7 +480,7 @@ func (bss *baseSqlSession) AsListContext(ctx context.Context, sqlText string, ar
 	elemValue := value.Elem()       // 存放查询结果的切片。
 	elemType := value.Type().Elem() // 存放查询结果的切片的类型。
 	if elemType.Kind() != reflect.Slice {
-		panic(fmt.Errorf("eexpected pointer to slice of struct, but %T", elemValue))
+		return fmt.Errorf("eexpected pointer to slice of struct, but %T", elemValue)
 	}
 
 	resultType := elemType.Elem() // 存放查询结果的切片的元素的类型。
@@ -495,10 +490,10 @@ func (bss *baseSqlSession) AsListContext(ctx context.Context, sqlText string, ar
 	} else if resultType.Kind() == reflect.Ptr {
 		sliceContentType = resultType.Elem()
 		if sliceContentType.Kind() != reflect.Struct {
-			panic(fmt.Errorf("expected slice content is pointer or struct, but %T", sliceContentType))
+			return fmt.Errorf("expected slice content is pointer or struct, but %T", sliceContentType)
 		}
 	} else {
-		panic(fmt.Errorf("expected slice content is pointer or struct, but %T", resultType))
+		return fmt.Errorf("expected slice content is pointer or struct, but %T", resultType)
 	}
 
 	if bss.logSql {
@@ -509,11 +504,9 @@ func (bss *baseSqlSession) AsListContext(ctx context.Context, sqlText string, ar
 		return err
 	}
 	defer func(rows *sql.Rows) {
-		err := rows.Close()
-		if err != nil {
-			panic(err)
-		}
+		err = rows.Close()
 	}(rows)
+
 	columns, _ := rows.Columns()
 	for rows.Next() {
 		// 查询结果切片中的一个元素。
@@ -533,7 +526,7 @@ func (bss *baseSqlSession) AsListContext(ctx context.Context, sqlText string, ar
 			elemValue.Set(reflect.Append(elemValue, rowDest.Addr()))
 		}
 	}
-	return nil
+	return err
 }
 
 func getScanDest(rowDest reflect.Value, columns []string) []any {
@@ -577,10 +570,7 @@ func (bss *baseSqlSession) AsPrimitiveListContext(ctx context.Context, sqlText s
 		return err
 	}
 	defer func(rows *sql.Rows) {
-		err := rows.Close()
-		if err != nil {
-			panic(err)
-		}
+		err = rows.Close()
 	}(rows)
 
 	value := reflect.ValueOf(dest) // 指向存放查询结果的切片的指针。
@@ -590,7 +580,7 @@ func (bss *baseSqlSession) AsPrimitiveListContext(ctx context.Context, sqlText s
 	elemValue := value.Elem()       // 存放查询结果的切片。
 	elemType := value.Type().Elem() // 存放查询结果的切片的类型。
 	if elemType.Kind() != reflect.Slice {
-		panic(fmt.Errorf("expected pointer to slice of primitive, but %T", elemValue))
+		return fmt.Errorf("expected pointer to slice of primitive, but %T", elemValue)
 	}
 
 	resultType := elemType.Elem() // 存放查询结果的切片的元素的类型。
@@ -600,10 +590,10 @@ func (bss *baseSqlSession) AsPrimitiveListContext(ctx context.Context, sqlText s
 	} else if resultType.Kind() == reflect.Ptr {
 		sliceContentType = resultType.Elem()
 		if uint(sliceContentType.Kind()) > uint(reflect.Float64) {
-			panic(fmt.Errorf("expected slice content is pointer or struct, but %T", sliceContentType))
+			return fmt.Errorf("expected slice content is pointer or struct, but %T", sliceContentType)
 		}
 	} else {
-		panic(fmt.Errorf("expected slice content is pointer or primitive, but %T", resultType))
+		return fmt.Errorf("expected slice content is pointer or primitive, but %T", resultType)
 	}
 
 	for rows.Next() {
@@ -621,7 +611,7 @@ func (bss *baseSqlSession) AsPrimitiveListContext(ctx context.Context, sqlText s
 		}
 	}
 
-	return nil
+	return err
 }
 
 func (bss *baseSqlSession) AsPrimitiveList(sqlText string, args []any, dest []any) error {

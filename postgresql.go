@@ -206,12 +206,12 @@ func (sb *PostgreSqlSession) DoneRowsAffected() (int64, error) {
 	return sb.DoneRowsAffectedContext(context.Background())
 }
 
-func (sb *PostgreSqlSession) AsSingleContext(ctx context.Context, dest any) bool {
+func (sb *PostgreSqlSession) AsSingleContext(ctx context.Context, dest any) error {
 	sqlText, args := sb.builderSQLText()
 	return sb.baseSqlSession.AsSingleContext(ctx, sqlText, args, dest)
 }
 
-func (sb *PostgreSqlSession) AsSingle(dest any) bool {
+func (sb *PostgreSqlSession) AsSingle(dest any) error {
 	return sb.AsSingleContext(context.Background(), dest)
 }
 
