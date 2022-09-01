@@ -11,6 +11,7 @@ func TestSelect(t *testing.T) {
 	sql.Select("login_name", "creator,create_time")
 	sql.From("user u")
 	sql.InnerJoin("tenant t ON u.main_id = t.id")
+	sql.InnerJoin("tenant2 t2 ON u.main_id = t2.id")
 	sql.RightOuterJoin("test t on t.id = u.id")
 	sql.Where("u.id = #{id}")
 	sql.Where("u.update > 3")

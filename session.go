@@ -362,7 +362,7 @@ func (bss *baseSqlSession) AddParam(param string, value any) {
 func (bss *baseSqlSession) Append(sql string, args ...any) {
 	bss.rawSql = append(bss.rawSql, sql)
 	placeholder := getPlaceholder(sql)
-	if len(placeholder) == 0 {
+	if len(args) == 0 {
 		return
 	}
 	if len(args) != len(placeholder) {
@@ -394,10 +394,11 @@ func (bss *baseSqlSession) DeleteFrom(table string) {
 }
 
 func (bss *baseSqlSession) DoneContext(ctx context.Context, sqlText string, args []any) error {
-	bss.Reset()
+
 	if bss.logSql {
 		logSql(sqlText, args)
 	}
+	bss.Reset()
 	_, err := bss.dbSession.ExecContext(ctx, sqlText, args...)
 	if err != nil {
 		return err
@@ -410,13 +411,15 @@ func (bss *baseSqlSession) Done(sqlText string, args []any) error {
 
 }
 func (bss *baseSqlSession) DoneRowsAffectedContext(ctx context.Context, sqlText string, args []any) (int64, error) {
-	bss.Reset()
+
 	if len(args) == 0 {
 		return 0, errors.New("必须指定 Where 条件")
 	}
 	if bss.logSql {
 		logSql(sqlText, args)
 	}
+
+	bss.Reset()
 	result, err := bss.dbSession.ExecContext(ctx, sqlText, args...)
 	if err != nil {
 		return 0, err
@@ -429,7 +432,7 @@ func (bss *baseSqlSession) DoneRowsAffected(sqlText string, args []any) (int64, 
 }
 
 func (bss *baseSqlSession) AsSingleContext(ctx context.Context, sqlText string, args []any, dest any) error {
-	bss.Reset()
+
 	if dest == nil {
 		return fmt.Errorf("scalar value cannot be nil")
 	}
@@ -441,6 +444,8 @@ func (bss *baseSqlSession) AsSingleContext(ctx context.Context, sqlText string, 
 	if bss.logSql {
 		logSql(sqlText, args)
 	}
+
+	bss.Reset()
 	rows, err := bss.dbSession.QueryContext(ctx, sqlText, args...)
 	if err != nil {
 		return err
@@ -472,7 +477,7 @@ func (bss *baseSqlSession) AsSingle(sqlText string, args []any, dest any) error 
 
 }
 func (bss *baseSqlSession) AsListContext(ctx context.Context, sqlText string, args []any, dest any) error {
-	bss.Reset()
+
 	value := reflect.ValueOf(dest) // 指向存放查询结果的切片的指针。
 	if value.Kind() != reflect.Ptr {
 		return fmt.Errorf("expected pointer to slice of struct, but %T", dest)
@@ -499,6 +504,8 @@ func (bss *baseSqlSession) AsListContext(ctx context.Context, sqlText string, ar
 	if bss.logSql {
 		logSql(sqlText, args)
 	}
+
+	bss.Reset()
 	rows, err := bss.dbSession.QueryContext(ctx, sqlText, args...)
 	if err != nil {
 		return err
@@ -545,10 +552,12 @@ func (bss *baseSqlSession) AsList(sqlText string, args []any, dest any) error {
 }
 
 func (bss *baseSqlSession) AsPrimitiveContext(ctx context.Context, sqlText string, args []any, dest any) error {
-	bss.Reset()
+
 	if bss.logSql {
 		logSql(sqlText, args)
 	}
+
+	bss.Reset()
 	row := bss.dbSession.QueryRowContext(ctx, sqlText, args...)
 	if err := row.Scan(dest); err != nil {
 		return err
@@ -561,10 +570,11 @@ func (bss *baseSqlSession) AsPrimitive(sqlText string, args []any, dest any) err
 }
 
 func (bss *baseSqlSession) AsPrimitiveListContext(ctx context.Context, sqlText string, args []any, dest any) error {
-	bss.Reset()
+
 	if bss.logSql {
 		logSql(sqlText, args)
 	}
+	bss.Reset()
 	rows, err := bss.dbSession.QueryContext(ctx, sqlText, args...)
 	if err != nil {
 		return err
@@ -629,13 +639,13 @@ func isNotZero(value any) bool {
 	case time.Time:
 		return !t.IsZero()
 	case sql.NullString: // check null stmt types nulls = ''
-		return !t.Valid
+		return t.Valid
 	case sql.NullBool:
-		return !t.Valid
+		return t.Valid
 	case sql.NullInt64:
-		return !t.Valid
+		return t.Valid
 	case sql.NullFloat64:
-		return !t.Valid
+		return t.Valid
 	case int32:
 		return value.(int32) != 0
 	case int16:

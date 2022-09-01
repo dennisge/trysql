@@ -3,8 +3,8 @@ package sqltext
 import "strings"
 
 const (
-	and = ") \nAND ("
-	or  = ") \nOR ("
+	and = ") AND ("
+	or  = ") OR ("
 )
 
 type SQL interface {
@@ -282,11 +282,11 @@ func (s *Statement) sqlClause(builder *strings.Builder, keyword string, parts []
 }
 
 func (s *Statement) joins(builder *strings.Builder) {
-	s.sqlClause(builder, "JOIN", s.join, "", "", "\nJOIN ")
-	s.sqlClause(builder, "INNER JOIN", s.innerJoin, "", "", "\nINNER JOIN ")
-	s.sqlClause(builder, "OUTER JOIN", s.outerJoin, "", "", "\nOUTER JOIN ")
-	s.sqlClause(builder, "LEFT OUTER JOIN", s.leftOuterJoin, "", "", "\nLEFT OUTER JOIN ")
-	s.sqlClause(builder, "RIGHT OUTER JOIN", s.rightOuterJoin, "", "", "\nRIGHT OUTER JOIN ")
+	s.sqlClause(builder, "JOIN", s.join, "", "", " JOIN ")
+	s.sqlClause(builder, "INNER JOIN", s.innerJoin, "", "", " INNER JOIN ")
+	s.sqlClause(builder, "OUTER JOIN", s.outerJoin, "", "", " OUTER JOIN ")
+	s.sqlClause(builder, "LEFT OUTER JOIN", s.leftOuterJoin, "", "", " LEFT OUTER JOIN ")
+	s.sqlClause(builder, "RIGHT OUTER JOIN", s.rightOuterJoin, "", "", " RIGHT OUTER JOIN ")
 }
 
 type limitingRowsStrategy int

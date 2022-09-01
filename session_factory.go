@@ -43,15 +43,22 @@ type SqlSessionFactory interface {
 	// NewTimeoutContext 新建一个 Timeout Context
 	NewTimeoutContext(ctx context.Context, duration ...time.Duration) (context.Context, context.CancelFunc)
 
-	// DoContext 执行 非事务 Sql 查询
+	// DoTimeoutContext 执行 非事务 Sql 查询，指定超时时间
+	DoTimeoutContext(timeout time.Duration, ctx context.Context, sqlHandler SqlHandler) error
+
+	// DoContext 执行 非事务 Sql 查询，使用默认超时
 	DoContext(ctx context.Context, sqlHandler SqlHandler) error
-	// Do 执行 非事务 Sql 查询
+
+	// Do 执行 非事务 Sql 查询， 使用默认超时
 	Do(sqlHandler SqlHandler) error
 
-	// DoInTxContext 在一个事务中 执行 Sql 查询
+	// DoInTxTimeoutContext 在一个事务中 执行 Sql 查询，指定超时时间
+	DoInTxTimeoutContext(timeout time.Duration, ctx context.Context, sqlHandler SqlHandler) error
+
+	// DoInTxContext 在一个事务中 执行 Sql 查询，使用默认超时
 	DoInTxContext(ctx context.Context, sqlHandler SqlHandler) error
 
-	// DoInTx 在一个事务中 执行 Sql 查询
+	// DoInTx 在一个事务中 执行 Sql 查询，使用默认超时
 	DoInTx(sqlHandler SqlHandler) error
 }
 type DefaultSqlSessionFactory struct {
@@ -146,22 +153,23 @@ func (ssf *DefaultSqlSessionFactory) NewTxSqlSession(dbSession DbSession) SqlSes
 	}
 }
 
-// DoContext 调用 sqlHandler
-func (ssf *DefaultSqlSessionFactory) DoContext(ctx context.Context, sqlHandler SqlHandler) error {
-	timeoutContext, cancelFunc := ssf.NewTimeoutContext(ctx)
+func (ssf *DefaultSqlSessionFactory) DoTimeoutContext(timeout time.Duration, ctx context.Context, sqlHandler SqlHandler) error {
+	timeoutContext, cancelFunc := ssf.NewTimeoutContext(ctx, timeout)
 	defer cancelFunc()
 	sqlSession := ssf.NewSqlSession()
 	return sqlHandler(timeoutContext, sqlSession)
 }
 
-// Do 调用 sqlHandler
-func (ssf *DefaultSqlSessionFactory) Do(sqlHandler SqlHandler) error {
-	return ssf.DoContext(context.TODO(), sqlHandler)
+func (ssf *DefaultSqlSessionFactory) DoContext(ctx context.Context, sqlHandler SqlHandler) error {
+	return ssf.DoTimeoutContext(ssf.sqlTimeout, ctx, sqlHandler)
 }
 
-// DoInTxContext 在事务中 调用 sqlHandler
-func (ssf *DefaultSqlSessionFactory) DoInTxContext(ctx context.Context, sqlHandler SqlHandler) error {
-	timeoutContext, cancelFunc := ssf.NewTimeoutContext(ctx)
+func (ssf *DefaultSqlSessionFactory) Do(sqlHandler SqlHandler) error {
+	return ssf.DoTimeoutContext(ssf.sqlTimeout, context.TODO(), sqlHandler)
+}
+
+func (ssf *DefaultSqlSessionFactory) DoInTxTimeoutContext(timeout time.Duration, ctx context.Context, sqlHandler SqlHandler) error {
+	timeoutContext, cancelFunc := ssf.NewTimeoutContext(ctx, timeout)
 	defer cancelFunc()
 	dbSession := ssf.NewTxDbSessionContext(timeoutContext, nil)
 	sqlSession := ssf.NewTxSqlSession(dbSession)
@@ -170,7 +178,10 @@ func (ssf *DefaultSqlSessionFactory) DoInTxContext(ctx context.Context, sqlHandl
 	})
 }
 
-// DoInTx 在事务中 调用 sqlHandler
+func (ssf *DefaultSqlSessionFactory) DoInTxContext(ctx context.Context, sqlHandler SqlHandler) error {
+	return ssf.DoInTxTimeoutContext(ssf.sqlTimeout, ctx, sqlHandler)
+}
+
 func (ssf *DefaultSqlSessionFactory) DoInTx(sqlHandler SqlHandler) error {
-	return ssf.DoInTxContext(context.TODO(), sqlHandler)
+	return ssf.DoInTxTimeoutContext(ssf.sqlTimeout, context.TODO(), sqlHandler)
 }
