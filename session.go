@@ -777,6 +777,33 @@ func getPlaceholder(s string) []string {
 	return placeholders
 }
 
+func getDynamicAndInjectedPlaceholders(s string) ([]string, []string) {
+
+	dynamicPlaceholders := make([]string, 0)
+	injectedPlaceholders := make([]string, 0)
+	var dynamic bool
+	sIndex := -1
+	for i, v := range []byte(s) {
+		if v == '#' && s[i+1] == '{' {
+			sIndex = i
+			dynamic = true
+		} else if v == '$' && s[i+1] == '{' {
+			sIndex = i
+			dynamic = false
+		} else if v == '}' && sIndex != -1 {
+
+			if dynamic {
+				dynamicPlaceholders = append(dynamicPlaceholders, s[sIndex:i+1])
+			} else {
+				injectedPlaceholders = append(injectedPlaceholders, s[sIndex:i+1])
+			}
+			sIndex = -1
+		}
+	}
+
+	return dynamicPlaceholders, injectedPlaceholders
+}
+
 func (bss *baseSqlSession) fillArgValue(sqlText string, value any) {
 	placeholder := getPlaceholder(sqlText)
 	if len(placeholder) > 0 {

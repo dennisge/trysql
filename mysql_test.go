@@ -4,18 +4,16 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
 )
 
-type Album struct {
-	ID         int64  `colname:"id"`
-	Title      string `colname:"title"`
-	Artist     string `colname:"artist"`
-	Price      float64
+type TrackingResultPo struct {
+	ID         int64 `colname:"id"`
+	TrackingNo string
 	Quantity   int64
 	HelloWorld string
 	yourName   string
@@ -25,68 +23,109 @@ type Album struct {
 func Test_MYSQL_AsList(t *testing.T) {
 	db, err := initDB()
 	if err != nil {
-		t.Fatal(err)
+		t.Log(err)
 	}
 
-	var album = make([]Album, 0)
+	var po = make([]TrackingResultPo, 0)
 	newSession := NewTxSession(db, true)
-	err = NewMySqlSession(newSession).Select("r.id, title,artist,create_time").
-		From("album r").
-		Where("artist like #{go}", "你%").
-		AsList(&album)
+	err = NewMySqlSession(newSession).Select("r.id,create_time").
+		From("acc_tracking_result r").
+		Where("tracking_no like #{go}", "你%").
+		AsList(&po)
 	if err != nil {
-		t.Fatal(err)
+		t.Log(err)
 	}
-	for i := range album {
-		fmt.Println(album[i])
+	for i := range po {
+		fmt.Println(po[i])
 	}
 }
 
 func Test_MYSQL_AsSingle(t *testing.T) {
 	db, _ := initDB()
 
-	var album Album
+	var po TrackingResultPo
 
 	sqlSession := NewTxSession(db, false)
-	single := NewMySqlSession(sqlSession).Select("r.id, title,artist").
-		From("album r").
+	single := NewMySqlSession(sqlSession).Select("r.id, tracking_no, create_time").
+		From("acc_tracking_result r").
 		Where("title <> #{test}", "Test").
-		AsSingle(&album)
-	fmt.Println(single, album)
+		AsSingle(&po)
+	fmt.Println(single, po)
 
 }
 
 func Test_MYSQL_AsPrimitiveList(t *testing.T) {
 	db, _ := initDB()
-	var album []int64
-	sqlSession := NewTxSession(db, false)
-	err := NewMySqlSession(sqlSession).Select("carrier_id").
-		From("acc_tracking_result r").Limit(2).
-		AsPrimitiveList(&album)
-	if err != nil {
-		t.Fatal(err)
+
+	type Po struct {
+		Id        int64
+		CarrierId int64
 	}
-	fmt.Println(album)
+	var po []Po
+	sqlSession := NewTxSession(db, false)
+	err := NewMySqlSession(sqlSession).Select("${id}", "carrier_id").
+		From("acc_tracking_result r").AddParam("${id}", "id").Where("id > #{id}", 10000).
+		Where("id < ${id}").
+		Limit(2).
+		AsList(&po)
+	if err != nil {
+		t.Log(err)
+	}
+	fmt.Println(po)
+}
+
+func TestTxDbSession_Commit(t *testing.T) {
+	placeholder, p2 := getxPlaceholder("select ${id},#{id}, ${id}, #{id} and from #{xxx} where id=${3}")
+	fmt.Println(placeholder, p2)
+}
+
+func getxPlaceholder(s string) ([]string, []string) {
+	sIndex := -1
+	placeholders := make([]string, 0)
+
+	placeholders2 := make([]string, 0)
+
+	var dynamic bool
+
+	for i, v := range []byte(s) {
+		if v == '#' && s[i+1] == '{' {
+			sIndex = i
+			dynamic = true
+		} else if v == '$' && s[i+1] == '{' {
+			sIndex = i
+			dynamic = false
+		} else if v == '}' && sIndex != -1 {
+
+			if dynamic {
+				placeholders = append(placeholders, s[sIndex:i+1])
+			} else {
+				placeholders2 = append(placeholders2, s[sIndex:i+1])
+			}
+			sIndex = -1
+		}
+	}
+
+	return placeholders, placeholders2
 }
 
 func Test_MYSQL_InsertSelective(t *testing.T) {
 	db, _ := initDB()
 	sqlSession := NewTxSession(db, false)
-	err := NewMySqlSession(sqlSession).InsertInto("album").Values("title", "你好的").
+	err := NewMySqlSession(sqlSession).InsertInto("acc_tracking_result").Values("title", "你好的").
 		Values("artist", "").
 		Values("price", 0).Done()
 	if err != nil {
-		t.Fatal(err)
+		t.Log(err)
 	}
 
 }
 func Test_MYSQL_InsertOne(t *testing.T) {
 	db, _ := initDB()
 	sqlSession := NewTxSession(db, false)
-	err := NewMySqlSession(sqlSession).InsertInto("album").IntoColumns("title,artist,price").
+	err := NewMySqlSession(sqlSession).InsertInto("acc_tracking_result").IntoColumns("title,artist,price").
 		IntoValues("1", "2", "3").Done()
 	if err != nil {
-		t.Fatal(err)
+		t.Log(err)
 	}
 
 }
@@ -94,10 +133,10 @@ func Test_MYSQL_InsertOne(t *testing.T) {
 func Test_MYSQL_InsertMany(t *testing.T) {
 	db, _ := initDB()
 	sqlSession := NewTxSession(db, false)
-	err := NewMySqlSession(sqlSession).InsertInto("album").IntoColumns("title,artist,price").
+	err := NewMySqlSession(sqlSession).InsertInto("acc_tracking_result").IntoColumns("title,artist,price").
 		IntoMultiValues([][]any{{"1", "展示", 9}, {"11", "2展示", 19}}).Done()
 	if err != nil {
-		t.Fatal(err)
+		t.Log(err)
 	}
 }
 
@@ -105,10 +144,10 @@ func Test_MYSQL_InsertWithId(t *testing.T) {
 	db, _ := initDB()
 	ssf := NewSqlSessionFactory(Mysql, db, 300*time.Second, true)
 	sqlSession := ssf.NewSqlSession()
-	id, err := NewMySqlSession(sqlSession).InsertInto("album").IntoColumns("title,artist,price,create_time").
+	id, err := NewMySqlSession(sqlSession).InsertInto("acc_tracking_result").IntoColumns("title,artist,price,create_time").
 		IntoValues("1", "2", "3", time.Now()).DoneInsertId("id")
 	if err != nil {
-		t.Fatal(err)
+		t.Log(err)
 	}
 	fmt.Println(id)
 }
@@ -116,10 +155,10 @@ func Test_MYSQL_InsertWithId(t *testing.T) {
 func Test_MYSQL_Update(t *testing.T) {
 	db, _ := initDB()
 	sqlSession := NewTxSession(db, false)
-	id, err := NewMySqlSession(sqlSession).Update("album").SetSelective("title", "中文测试标题").
-		In("id", []any{1, 2, 3}).Where("artist <> #{name}", "TEST").DoneRowsAffected()
+	id, err := NewMySqlSession(sqlSession).Update("acc_tracking_result").SetSelective("title", "中文测试标题").
+		In("id", []any{-1, -2, -3}).Where("artist <> #{name}", "TEST").DoneRowsAffected()
 	if err != nil {
-		t.Fatal(err)
+		t.Log(err)
 	}
 	fmt.Println(id)
 }
@@ -127,9 +166,9 @@ func Test_MYSQL_Update(t *testing.T) {
 func Test_MYSQL_Delete(t *testing.T) {
 	db, _ := initDB()
 	sqlSession := NewTxSession(db, false)
-	id, err := NewMySqlSession(sqlSession).DeleteFrom("album").In("id", []any{156, 157, 158}).DoneRowsAffected()
+	id, err := NewMySqlSession(sqlSession).DeleteFrom("acc_tracking_result").In("id", []any{-156, -157, -158}).DoneRowsAffected()
 	if err != nil {
-		t.Fatal(err)
+		t.Log(err)
 	}
 	fmt.Println(id)
 }
@@ -139,11 +178,11 @@ func Test_MYSQL_AsPrimitive(t *testing.T) {
 	txSession := NewTxSession(db, false)
 	var count int64
 	sqlSession := NewMySqlSession(txSession)
-	err := sqlSession.Select("count(*)").From("acc_user c").Where("id > 300").
-		AppendRaw("AND exists(select id from acc_tenant where id = c.main_id)").
+	err := sqlSession.Select("count(*)").From("acc_tracking_result c").Where("id > 300").
+		AppendRaw("AND exists(select id from acc_tracking_result where id > 100)").
 		AsPrimitive(&count)
 	if err != nil {
-		t.Fatal(err)
+		t.Log(err)
 	}
 	fmt.Println(count)
 }
@@ -156,7 +195,7 @@ func initDB() (*sql.DB, error) {
 		Database string `json:"database"`
 	}
 	database := make(map[string]DbConfig)
-	file, err := ioutil.ReadFile("db_config.json")
+	file, err := os.ReadFile("db_config.json")
 	if err != nil {
 		panic(err)
 	}

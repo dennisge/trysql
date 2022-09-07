@@ -255,13 +255,16 @@ func (sb *PostgreSqlSession) LogSql(logSql bool) SqlSession {
 
 func (sb *PostgreSqlSession) builderSQLText() (string, []any) {
 	var sqlText = sb.sql.String() + " " + strings.Join(sb.rawSql, " ")
-	placeholder := getPlaceholder(sqlText)
+	dynamicPlaceholders, injectedPlaceholders := getDynamicAndInjectedPlaceholders(sqlText)
 	args := make([]any, 0)
-	if len(placeholder) > 0 {
-		for index, value := range placeholder {
-			sqlText = strings.Replace(sqlText, value, "$"+strconv.Itoa(index+1), 1)
-			args = append(args, sb.argMap[value])
-		}
+	for index, value := range dynamicPlaceholders {
+		sqlText = strings.Replace(sqlText, value, "$"+strconv.Itoa(index+1), 1)
+		args = append(args, sb.argMap[value])
+	}
+
+	for _, value := range injectedPlaceholders {
+		injected := sb.argMap[value]
+		sqlText = strings.Replace(sqlText, value, injected.(string), 1)
 	}
 
 	return sqlText, args

@@ -249,13 +249,18 @@ func (sb *MySqlSession) LogSql(logSql bool) SqlSession {
 
 func (sb *MySqlSession) builderSQLText() (string, []any) {
 	var sqlText = sb.sql.String() + " " + strings.Join(sb.rawSql, " ")
-	placeholder := getPlaceholder(sqlText)
+	dynamicPlaceholders, injectedPlaceholders := getDynamicAndInjectedPlaceholders(sqlText)
 	args := make([]any, 0)
-	if len(placeholder) > 0 {
-		for _, value := range placeholder {
-			sqlText = strings.Replace(sqlText, value, "?", 1)
-			args = append(args, sb.argMap[value])
-		}
+
+	for _, value := range dynamicPlaceholders {
+		sqlText = strings.Replace(sqlText, value, "?", 1)
+		args = append(args, sb.argMap[value])
 	}
+
+	for _, value := range injectedPlaceholders {
+		injected := sb.argMap[value]
+		sqlText = strings.Replace(sqlText, value, injected.(string), 1)
+	}
+
 	return sqlText, args
 }
