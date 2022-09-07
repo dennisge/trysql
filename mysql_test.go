@@ -64,50 +64,15 @@ func Test_MYSQL_AsList2(t *testing.T) {
 	var po []Po
 	sqlSession := NewTxSession(db, false)
 	err := NewMySqlSession(sqlSession).Select("${id}", "carrier_id").
-		From("acc_tracking_result r").Where("id > #{id}", 10000).
-		Where("id < ${iId}").
+		From("acc_tracking_result r").Where("id > #{id}", 1).
+		Where("id < ${iId} and id > #{xId}", 100000, 2).
 		AddParam("${id}", "id").
-		AddParam("${iId}", 300000).
 		Limit(2).
 		AsList(&po)
 	if err != nil {
 		t.Log(err)
 	}
 	fmt.Println(po)
-}
-
-func TestTxDbSession_Commit(t *testing.T) {
-	placeholder, p2 := getxPlaceholder("select ${id},#{id}, ${id}, #{id} and from #{xxx} where id=${3}")
-	fmt.Println(placeholder, p2)
-}
-
-func getxPlaceholder(s string) ([]string, []string) {
-	sIndex := -1
-	placeholders := make([]string, 0)
-
-	placeholders2 := make([]string, 0)
-
-	var dynamic bool
-
-	for i, v := range []byte(s) {
-		if v == '#' && s[i+1] == '{' {
-			sIndex = i
-			dynamic = true
-		} else if v == '$' && s[i+1] == '{' {
-			sIndex = i
-			dynamic = false
-		} else if v == '}' && sIndex != -1 {
-
-			if dynamic {
-				placeholders = append(placeholders, s[sIndex:i+1])
-			} else {
-				placeholders2 = append(placeholders2, s[sIndex:i+1])
-			}
-			sIndex = -1
-		}
-	}
-
-	return placeholders, placeholders2
 }
 
 func Test_MYSQL_InsertSelective(t *testing.T) {

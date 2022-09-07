@@ -191,7 +191,7 @@ func (bss *baseSqlSession) From(tables ...string) {
 func (bss *baseSqlSession) Where(condition string, args ...any) {
 	bss.sql.Where(condition)
 	placeholder := getPlaceholder(condition)
-	if len(placeholder) == 0 {
+	if len(args) == 0 {
 		return
 	}
 	if len(args) != len(placeholder) {
@@ -767,7 +767,7 @@ func getPlaceholder(s string) []string {
 	sIndex := -1
 	placeholders := make([]string, 0)
 	for i, v := range []byte(s) {
-		if v == '#' && s[i+1] == '{' {
+		if (v == '#' || v == '$') && s[i+1] == '{' {
 			sIndex = i
 		} else if v == '}' && sIndex != -1 {
 			placeholders = append(placeholders, s[sIndex:i+1])
