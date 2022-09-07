@@ -2,6 +2,7 @@ package trysql
 
 import (
 	"context"
+	"fmt"
 	"strings"
 )
 
@@ -259,7 +260,8 @@ func (sb *MySqlSession) builderSQLText() (string, []any) {
 
 	for _, value := range injectedPlaceholders {
 		injected := sb.argMap[value]
-		sqlText = strings.Replace(sqlText, value, injected.(string), 1)
+		sqlText = strings.Replace(sqlText, value, fmt.Sprintf("%v", injected), 1)
+
 	}
 
 	return sqlText, args

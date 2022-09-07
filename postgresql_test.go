@@ -54,6 +54,28 @@ func Test_PG_Select(t *testing.T) {
 	}
 }
 
+func Test_PG_AsList(t *testing.T) {
+	initPostgresqlDB()
+
+	type Po struct {
+		Id        int64
+		CarrierId int64
+	}
+	var po []Po
+	sqlSession := NewTxSession(sDB, false)
+	err := NewPostgreSqlSession(sqlSession).Select("${id}", "carrier_id").
+		From("acc_tracking_result r").Where("id > #{id}", 10000).
+		Where("id < ${iId}").
+		AddParam("${id}", "id").
+		AddParam("${iId}", 300000).
+		Limit(2).
+		AsList(&po)
+	if err != nil {
+		t.Log(err)
+	}
+	fmt.Println(po)
+}
+
 func Test_PG_SelectPrimitiveList(t *testing.T) {
 	initPostgresqlDB()
 

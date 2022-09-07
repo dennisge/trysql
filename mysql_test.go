@@ -54,7 +54,7 @@ func Test_MYSQL_AsSingle(t *testing.T) {
 
 }
 
-func Test_MYSQL_AsPrimitiveList(t *testing.T) {
+func Test_MYSQL_AsList2(t *testing.T) {
 	db, _ := initDB()
 
 	type Po struct {
@@ -64,8 +64,10 @@ func Test_MYSQL_AsPrimitiveList(t *testing.T) {
 	var po []Po
 	sqlSession := NewTxSession(db, false)
 	err := NewMySqlSession(sqlSession).Select("${id}", "carrier_id").
-		From("acc_tracking_result r").AddParam("${id}", "id").Where("id > #{id}", 10000).
-		Where("id < ${id}").
+		From("acc_tracking_result r").Where("id > #{id}", 10000).
+		Where("id < ${iId}").
+		AddParam("${id}", "id").
+		AddParam("${iId}", 300000).
 		Limit(2).
 		AsList(&po)
 	if err != nil {
@@ -127,7 +129,6 @@ func Test_MYSQL_InsertOne(t *testing.T) {
 	if err != nil {
 		t.Log(err)
 	}
-
 }
 
 func Test_MYSQL_InsertMany(t *testing.T) {
