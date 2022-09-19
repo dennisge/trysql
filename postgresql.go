@@ -176,8 +176,7 @@ func (sb *PostgreSqlSession) DoneContext(ctx context.Context) error {
 }
 
 func (sb *PostgreSqlSession) Done() error {
-	sqlText, args := sb.builderSQLText()
-	return sb.baseSqlSession.Done(sqlText, args)
+	return sb.DoneContext(context.Background())
 }
 
 func (sb *PostgreSqlSession) DoneInsertIdContext(ctx context.Context, column string) (int64, error) {
@@ -240,6 +239,20 @@ func (sb *PostgreSqlSession) AsPrimitiveList(dest any) error {
 	return sb.AsPrimitiveListContext(context.Background(), dest)
 }
 
+func (sb *PostgreSqlSession) AsMapListContext(ctx context.Context) ([]map[string]any, error) {
+	sqlText, args := sb.builderSQLText()
+	return sb.baseSqlSession.AsMapListContext(ctx, sqlText, args)
+}
+func (sb *PostgreSqlSession) AsMapList() ([]map[string]any, error) {
+	return sb.AsMapListContext(context.Background())
+}
+func (sb *PostgreSqlSession) AsMapContext(ctx context.Context) (map[string]any, error) {
+	sqlText, args := sb.builderSQLText()
+	return sb.baseSqlSession.AsMapContext(ctx, sqlText, args)
+}
+func (sb *PostgreSqlSession) AsMap() (map[string]any, error) {
+	return sb.AsMapContext(context.Background())
+}
 func (sb *PostgreSqlSession) InTx(txFunc func() error) error {
 	return sb.InTx(txFunc)
 }

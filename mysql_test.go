@@ -153,6 +153,35 @@ func Test_MYSQL_AsPrimitive(t *testing.T) {
 	fmt.Println(count)
 }
 
+func Test_MYSQL_AsMap(t *testing.T) {
+	db, _ := initDB()
+
+	sqlSession := NewTxSession(db, false)
+	m, err := NewMySqlSession(sqlSession).Select("*").
+		From("acc_user r").Limit(1).
+		AsMap()
+	if err != nil {
+		t.Error(err)
+	}
+
+	t.Logf("%v", m)
+}
+
+func Test_MYSQL_AsMapList(t *testing.T) {
+	db, _ := initDB()
+
+	sqlSession := NewTxSession(db, false)
+	m, err := NewMySqlSession(sqlSession).Select("*").
+		From("acc_user r").Limit(2).
+		AsMapList()
+	if err != nil {
+		t.Error(err)
+	}
+	for _, v := range m {
+		t.Logf("%v", v)
+	}
+}
+
 func initDB() (*sql.DB, error) {
 	type DbConfig struct {
 		User     string `json:"user"`

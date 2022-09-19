@@ -174,8 +174,7 @@ func (sb *MySqlSession) DoneContext(ctx context.Context) error {
 }
 
 func (sb *MySqlSession) Done() error {
-	sqlText, args := sb.builderSQLText()
-	return sb.baseSqlSession.Done(sqlText, args)
+	return sb.DoneContext(context.Background())
 }
 
 func (sb *MySqlSession) DoneInsertIdContext(ctx context.Context, _ string) (int64, error) {
@@ -236,6 +235,20 @@ func (sb *MySqlSession) AsPrimitiveListContext(ctx context.Context, dest any) er
 }
 func (sb *MySqlSession) AsPrimitiveList(dest any) error {
 	return sb.AsPrimitiveListContext(context.Background(), dest)
+}
+func (sb *MySqlSession) AsMapListContext(ctx context.Context) ([]map[string]any, error) {
+	sqlText, args := sb.builderSQLText()
+	return sb.baseSqlSession.AsMapListContext(ctx, sqlText, args)
+}
+func (sb *MySqlSession) AsMapList() ([]map[string]any, error) {
+	return sb.AsMapListContext(context.Background())
+}
+func (sb *MySqlSession) AsMapContext(ctx context.Context) (map[string]any, error) {
+	sqlText, args := sb.builderSQLText()
+	return sb.baseSqlSession.AsMapContext(ctx, sqlText, args)
+}
+func (sb *MySqlSession) AsMap() (map[string]any, error) {
+	return sb.AsMapContext(context.Background())
 }
 
 func (sb *MySqlSession) Reset() SqlSession {

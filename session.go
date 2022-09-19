@@ -150,6 +150,18 @@ type SqlSession interface {
 	// AsPrimitiveList 执行 SQL,dest 是 slice of primitive 类型
 	AsPrimitiveList(dest any) error
 
+	// AsMapListContext 执行 SQL
+	AsMapListContext(ctx context.Context) ([]map[string]any, error)
+
+	// AsMapList 执行 SQL, 结果生成 Map 对象
+	AsMapList() ([]map[string]any, error)
+
+	// AsMapContext 执行 SQL
+	AsMapContext(ctx context.Context) (map[string]any, error)
+
+	// AsMap 执行 SQL, 结果生成 Map 对象
+	AsMap() (map[string]any, error)
+
 	// Reset 重置当前 SqlSession 以再次使用
 	Reset() SqlSession
 
@@ -406,10 +418,6 @@ func (bss *baseSqlSession) DoneContext(ctx context.Context, sqlText string, args
 	return nil
 }
 
-func (bss *baseSqlSession) Done(sqlText string, args []any) error {
-	return bss.DoneContext(context.Background(), sqlText, args)
-
-}
 func (bss *baseSqlSession) DoneRowsAffectedContext(ctx context.Context, sqlText string, args []any) (int64, error) {
 
 	if len(args) == 0 {
@@ -472,10 +480,6 @@ func (bss *baseSqlSession) AsSingleContext(ctx context.Context, sqlText string, 
 	return err
 }
 
-func (bss *baseSqlSession) AsSingle(sqlText string, args []any, dest any) error {
-	return bss.AsSingleContext(context.Background(), sqlText, args, dest)
-
-}
 func (bss *baseSqlSession) AsListContext(ctx context.Context, sqlText string, args []any, dest any) error {
 
 	value := reflect.ValueOf(dest) // 指向存放查询结果的切片的指针。
@@ -547,10 +551,6 @@ func getScanDest(rowDest reflect.Value, columns []string) []any {
 	return scanDest
 }
 
-func (bss *baseSqlSession) AsList(sqlText string, args []any, dest any) error {
-	return bss.AsListContext(context.Background(), sqlText, args, dest)
-}
-
 func (bss *baseSqlSession) AsPrimitiveContext(ctx context.Context, sqlText string, args []any, dest any) error {
 
 	if bss.logSql {
@@ -563,10 +563,6 @@ func (bss *baseSqlSession) AsPrimitiveContext(ctx context.Context, sqlText strin
 		return err
 	}
 	return nil
-}
-
-func (bss *baseSqlSession) AsPrimitive(sqlText string, args []any, dest any) error {
-	return bss.AsPrimitiveContext(context.Background(), sqlText, args, dest)
 }
 
 func (bss *baseSqlSession) AsPrimitiveListContext(ctx context.Context, sqlText string, args []any, dest any) error {
@@ -624,8 +620,82 @@ func (bss *baseSqlSession) AsPrimitiveListContext(ctx context.Context, sqlText s
 	return err
 }
 
-func (bss *baseSqlSession) AsPrimitiveList(sqlText string, args []any, dest []any) error {
-	return bss.AsPrimitiveListContext(context.Background(), sqlText, args, dest)
+func (bss *baseSqlSession) AsMapListContext(ctx context.Context, sqlText string, args []any) ([]map[string]any, error) {
+	if bss.logSql {
+		logSql(sqlText, args)
+	}
+	bss.Reset()
+	rows, err := bss.dbSession.QueryContext(ctx, sqlText, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func(rows *sql.Rows) {
+		err = rows.Close()
+	}(rows)
+
+	columns, _ := rows.Columns()
+	r := make([]map[string]any, 0)
+	for rows.Next() {
+		results := make([]any, len(columns))
+		resultPointers := make([]any, len(columns))
+		for i := range columns {
+			resultPointers[i] = &results[i]
+		}
+
+		if err := rows.Scan(resultPointers...); err != nil {
+			return nil, err
+		}
+		m := make(map[string]any)
+		for i, colName := range columns {
+			val := resultPointers[i].(*any)
+			m[colName] = *val
+		}
+		r = append(r, m)
+	}
+
+	return r, nil
+}
+
+func (bss *baseSqlSession) AsMapContext(ctx context.Context, sqlText string, args []any) (map[string]any, error) {
+
+	if bss.logSql {
+		logSql(sqlText, args)
+	}
+
+	bss.Reset()
+	rows, err := bss.dbSession.QueryContext(ctx, sqlText, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	defer func(rows *sql.Rows) {
+		err = rows.Close()
+	}(rows)
+
+	columns, _ := rows.Columns()
+
+	results := make([]any, len(columns))
+	resultPointers := make([]any, len(columns))
+	for i := range columns {
+		resultPointers[i] = &results[i]
+	}
+
+	if rows.Next() {
+		if err := rows.Scan(resultPointers...); err != nil {
+			return nil, err
+		}
+	} else {
+		err := rows.Err()
+		if err != nil {
+			return nil, err
+		}
+	}
+	kvMap := make(map[string]any)
+	for i, colName := range columns {
+		val := resultPointers[i].(*any)
+		kvMap[colName] = *val
+	}
+	return kvMap, nil
 }
 
 func isNotZero(value any) bool {
@@ -662,7 +732,7 @@ func isNotZero(value any) bool {
 	}
 }
 
-func (bss *baseSqlSession) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+func (bss *baseSqlSession) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	return bss.dbSession.ExecContext(ctx, query, args...)
 }
 
@@ -678,7 +748,7 @@ func (bss *baseSqlSession) QueryContext(ctx context.Context, query string, args 
 	return bss.dbSession.QueryContext(ctx, query, args...)
 }
 
-func (bss *baseSqlSession) Exec(query string, args ...interface{}) (sql.Result, error) {
+func (bss *baseSqlSession) Exec(query string, args ...any) (sql.Result, error) {
 	return bss.dbSession.Exec(query, args...)
 }
 
@@ -686,11 +756,11 @@ func (bss *baseSqlSession) Prepare(query string) (*sql.Stmt, error) {
 	return bss.dbSession.Prepare(query)
 }
 
-func (bss *baseSqlSession) Query(query string, args ...interface{}) (*sql.Rows, error) {
+func (bss *baseSqlSession) Query(query string, args ...any) (*sql.Rows, error) {
 	return bss.dbSession.Query(query, args...)
 }
 
-func (bss *baseSqlSession) QueryRow(query string, args ...interface{}) *sql.Row {
+func (bss *baseSqlSession) QueryRow(query string, args ...any) *sql.Row {
 	return bss.dbSession.QueryRow(query, args...)
 }
 

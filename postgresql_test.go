@@ -162,6 +162,35 @@ func Test_Pg_Delete(t *testing.T) {
 	fmt.Println(result)
 }
 
+func Test_PG_AsMap(t *testing.T) {
+	initPostgresqlDB()
+
+	sqlSession := NewTxSession(sDB, false)
+	m, err := NewPostgreSqlSession(sqlSession).Select("*").
+		From("acc_tracking_result r").Limit(1).
+		AsMap()
+	if err != nil {
+		t.Error(err)
+	}
+
+	t.Logf("%v", m)
+}
+
+func Test_PG_AsMapList(t *testing.T) {
+	initPostgresqlDB()
+
+	sqlSession := NewTxSession(sDB, false)
+	m, err := NewPostgreSqlSession(sqlSession).Select("*").
+		From("acc_tracking_result r").Limit(2).
+		AsMapList()
+	if err != nil {
+		t.Error(err)
+	}
+	for _, v := range m {
+		t.Logf("%v", v)
+	}
+}
+
 func TestPostgreSqlSession_Select(t *testing.T) {
 	var sqlText = `
  	date_trunc('day',now()) time_2,
