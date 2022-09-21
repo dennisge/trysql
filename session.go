@@ -30,11 +30,17 @@ type SqlSession interface {
 	// WhereSelective  当 arg 不为 零值时，构建 Select, Update, Delete 的 Where 子句
 	WhereSelective(condition string, arg any) SqlSession
 
-	// In  当 args 不空时，构建 Where 子句 IN 表达式
-	In(column string, args []any) SqlSession
+	// WhereIn  当 args 不空时，构建 Where 子句 IN 表达式
+	WhereIn(column string, args []any) SqlSession
 
-	// NotIn 当 args 不空时， 构建 Where 子句 NotIn 表达式
-	NotIn(column string, args []any) SqlSession
+	// WhereNotIn 当 args 不空时， 构建 Where 子句 NotIn 表达式
+	WhereNotIn(column string, args []any) SqlSession
+
+	// WhereInInt64  当 args 不空时，构建 Where 子句 IN 表达式
+	WhereInInt64(column string, args []int64) SqlSession
+
+	// WhereNotInInt64 当 args 不空时， 构建 Where 子句 NotIn 表达式
+	WhereNotInInt64(column string, args []int64) SqlSession
 
 	// GroupBy  构建 GroupBy 子句
 	GroupBy(columns ...string) SqlSession
@@ -105,8 +111,14 @@ type SqlSession interface {
 	// AddParam 单独添加 SQL 动态参数值
 	AddParam(param string, value any) SqlSession
 
-	// AppendRaw 在 SqlSession 自动构建的 SQL 之后，追加 SQL
+	// AddParamSelective 单独添加 SQL 动态参数值, 仅当 value 不为零值时添加
+	AddParamSelective(param string, value any) SqlSession
+
+	// AppendRaw 在非 Append 方法自动构建的 SQL 之后追加 SQL
 	AppendRaw(rawSql string, args ...any) SqlSession
+
+	// Append 在非 Append 方法自动构建的 SQL 之后追加 SqlSession
+	Append(sql SqlSession) SqlSession
 
 	// DoneContext 执行 SQL
 	DoneContext(ctx context.Context) error
@@ -164,6 +176,9 @@ type SqlSession interface {
 
 	// Reset 重置当前 SqlSession 以再次使用
 	Reset() SqlSession
+
+	// New 基于当前 SqlSession的 数据库连接，新建 一个 SqlSession ,
+	New() SqlSession
 
 	// LogSql 是否输出 Sql 信息,必须在 SQL 构建执行之前(Done***, As***)调用
 	LogSql(logSql bool) SqlSession
@@ -369,6 +384,12 @@ func (bss *baseSqlSession) Offset(offset int) {
 }
 func (bss *baseSqlSession) AddParam(param string, value any) {
 	bss.argMap[param] = value
+}
+
+func (bss *baseSqlSession) AddParamSelective(param string, value any) {
+	if isNotZero(value) {
+		bss.argMap[param] = value
+	}
 }
 
 func (bss *baseSqlSession) Append(sql string, args ...any) {
@@ -881,4 +902,14 @@ func (bss *baseSqlSession) fillArgValue(sqlText string, value any) {
 			bss.argMap[ph] = value
 		}
 	}
+}
+
+func (bss *baseSqlSession) getSqlText() string {
+	var sqlText = bss.sql.String()
+	if len(sqlText) == 0 {
+		sqlText = strings.Join(bss.rawSql, " ")
+	} else {
+		sqlText = sqlText + " " + strings.Join(bss.rawSql, " ")
+	}
+	return sqlText
 }

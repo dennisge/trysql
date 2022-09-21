@@ -36,14 +36,30 @@ func (sb *PostgreSqlSession) WhereSelective(condition string, arg any) SqlSessio
 	return sb
 }
 
-func (sb *PostgreSqlSession) In(column string, args []any) SqlSession {
+func (sb *PostgreSqlSession) WhereIn(column string, args []any) SqlSession {
 	sb.baseSqlSession.In(column, args)
 	return sb
 }
 
-func (sb *PostgreSqlSession) NotIn(column string, args []any) SqlSession {
+func (sb *PostgreSqlSession) WhereNotIn(column string, args []any) SqlSession {
 	sb.baseSqlSession.NotIn(column, args)
 	return sb
+}
+
+func (sb *PostgreSqlSession) WhereInInt64(column string, args []int64) SqlSession {
+	inInt64 := make([]any, len(args))
+	for i, id := range args {
+		inInt64[i] = id
+	}
+	return sb.WhereIn(column, inInt64)
+}
+
+func (sb *PostgreSqlSession) WhereNotInInt64(column string, args []int64) SqlSession {
+	inInt64 := make([]any, len(args))
+	for i, id := range args {
+		inInt64[i] = id
+	}
+	return sb.WhereNotIn(column, inInt64)
 }
 
 func (sb *PostgreSqlSession) GroupBy(columns ...string) SqlSession {
@@ -165,8 +181,24 @@ func (sb *PostgreSqlSession) AddParam(param string, value any) SqlSession {
 	sb.baseSqlSession.AddParam(param, value)
 	return sb
 }
+
+func (sb *PostgreSqlSession) AddParamSelective(param string, value any) SqlSession {
+	sb.baseSqlSession.AddParamSelective(param, value)
+	return sb
+}
+
 func (sb *PostgreSqlSession) AppendRaw(sql string, args ...any) SqlSession {
 	sb.baseSqlSession.Append(sql, args...)
+	return sb
+}
+
+func (sb *PostgreSqlSession) Append(sql SqlSession) SqlSession {
+	if pgSql, ok := sql.(*PostgreSqlSession); ok {
+		for k, v := range pgSql.argMap {
+			sb.argMap[k] = v
+		}
+		sb.AppendRaw(pgSql.getSqlText())
+	}
 	return sb
 }
 
@@ -262,24 +294,26 @@ func (sb *PostgreSqlSession) Reset() SqlSession {
 	return sb
 }
 
+func (sb *PostgreSqlSession) New() SqlSession {
+	return NewPostgreSqlSession(sb.dbSession)
+}
+
 func (sb *PostgreSqlSession) LogSql(logSql bool) SqlSession {
 	sb.baseSqlSession.logSql = logSql
 	return sb
 }
 
 func (sb *PostgreSqlSession) builderSQLText() (string, []any) {
-	var sqlText = sb.sql.String() + " " + strings.Join(sb.rawSql, " ")
+	var sqlText = sb.getSqlText()
 	dynamicPlaceholders, injectedPlaceholders := getDynamicAndInjectedPlaceholders(sqlText)
-	args := make([]any, 0)
+	args := make([]any, len(dynamicPlaceholders))
 	for index, value := range dynamicPlaceholders {
 		sqlText = strings.Replace(sqlText, value, "$"+strconv.Itoa(index+1), 1)
-		args = append(args, sb.argMap[value])
+		args[index] = sb.argMap[value]
 	}
-
 	for _, value := range injectedPlaceholders {
 		injected := sb.argMap[value]
 		sqlText = strings.Replace(sqlText, value, fmt.Sprintf("%v", injected), 1)
 	}
-
 	return sqlText, args
 }

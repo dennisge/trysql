@@ -34,14 +34,29 @@ func (sb *MySqlSession) WhereSelective(condition string, arg any) SqlSession {
 	return sb
 }
 
-func (sb *MySqlSession) In(column string, args []any) SqlSession {
+func (sb *MySqlSession) WhereIn(column string, args []any) SqlSession {
 	sb.baseSqlSession.In(column, args)
 	return sb
 }
 
-func (sb *MySqlSession) NotIn(column string, args []any) SqlSession {
+func (sb *MySqlSession) WhereNotIn(column string, args []any) SqlSession {
 	sb.baseSqlSession.NotIn(column, args)
 	return sb
+}
+func (sb *MySqlSession) WhereInInt64(column string, args []int64) SqlSession {
+	inInt64 := make([]any, len(args))
+	for i, id := range args {
+		inInt64[i] = id
+	}
+	return sb.WhereIn(column, inInt64)
+}
+
+func (sb *MySqlSession) WhereNotInInt64(column string, args []int64) SqlSession {
+	inInt64 := make([]any, len(args))
+	for i, id := range args {
+		inInt64[i] = id
+	}
+	return sb.WhereIn(column, inInt64)
 }
 
 func (sb *MySqlSession) GroupBy(columns ...string) SqlSession {
@@ -163,8 +178,23 @@ func (sb *MySqlSession) AddParam(param string, value any) SqlSession {
 	sb.baseSqlSession.AddParam(param, value)
 	return sb
 }
+
+func (sb *MySqlSession) AddParamSelective(param string, value any) SqlSession {
+	sb.baseSqlSession.AddParamSelective(param, value)
+	return sb
+}
 func (sb *MySqlSession) AppendRaw(sql string, args ...any) SqlSession {
 	sb.baseSqlSession.Append(sql, args...)
+	return sb
+}
+
+func (sb *MySqlSession) Append(sql SqlSession) SqlSession {
+	if mysql, ok := sql.(*MySqlSession); ok {
+		for k, v := range mysql.argMap {
+			sb.argMap[k] = v
+		}
+		sb.AppendRaw(mysql.getSqlText())
+	}
 	return sb
 }
 
@@ -256,25 +286,27 @@ func (sb *MySqlSession) Reset() SqlSession {
 	return sb
 }
 
+func (sb *MySqlSession) New() SqlSession {
+	return NewMySqlSession(sb.dbSession)
+}
+
 func (sb *MySqlSession) LogSql(logSql bool) SqlSession {
 	sb.baseSqlSession.logSql = logSql
 	return sb
 }
 
 func (sb *MySqlSession) builderSQLText() (string, []any) {
-	var sqlText = sb.sql.String() + " " + strings.Join(sb.rawSql, " ")
+	var sqlText = sb.getSqlText()
 	dynamicPlaceholders, injectedPlaceholders := getDynamicAndInjectedPlaceholders(sqlText)
-	args := make([]any, 0)
-
-	for _, value := range dynamicPlaceholders {
+	args := make([]any, len(dynamicPlaceholders))
+	for i, value := range dynamicPlaceholders {
 		sqlText = strings.Replace(sqlText, value, "?", 1)
-		args = append(args, sb.argMap[value])
+		args[i] = sb.argMap[value]
 	}
 
 	for _, value := range injectedPlaceholders {
 		injected := sb.argMap[value]
 		sqlText = strings.Replace(sqlText, value, fmt.Sprintf("%v", injected), 1)
-
 	}
 
 	return sqlText, args

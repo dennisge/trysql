@@ -86,14 +86,14 @@ func Test_MYSQL_DoInTx(t *testing.T) {
 
 	err = factory.DoInTxContext(context.TODO(), func(ctx context.Context, sqlSession SqlSession) error {
 		updated, err := sqlSession.Update("album").SetSelective("title", "3555").
-			In("id", []any{3}).Where("artist <> #{name}", "TEST").DoneRowsAffectedContext(ctx)
+			WhereIn("id", []any{3}).Where("artist <> #{name}", "TEST").DoneRowsAffectedContext(ctx)
 		if err != nil {
 			t.Log(err)
 		}
 		fmt.Println("更新：", updated)
 
 		affected, err := sqlSession.Update("album").SetSelective("title", "222222").
-			In("id", []any{5}).Where("artist <> #{name}", "TEST").DoneRowsAffectedContext(ctx)
+			WhereIn("id", []any{5}).Where("artist <> #{name}", "TEST").DoneRowsAffectedContext(ctx)
 
 		if err != nil {
 			return err
@@ -144,13 +144,13 @@ func Test_MYSQL_TX(t *testing.T) {
 	sqlSession := factory.NewTxSqlSession(dbSession)
 
 	updated, err := sqlSession.Update("album").SetSelective("title", "111").
-		In("id", []any{3}).Where("artist <> #{name}", "TEST").DoneRowsAffectedContext(timeoutContext)
+		WhereIn("id", []any{3}).Where("artist <> #{name}", "TEST").DoneRowsAffectedContext(timeoutContext)
 	if err != nil {
 		t.Log(err)
 	}
 	fmt.Println("更新：", updated)
 	affected, err := sqlSession.Update("album").SetSelective("title", "66766").
-		In("id", []any{5}).Where("artist2 <> #{name}", "TEST").DoneRowsAffectedContext(timeoutContext)
+		WhereIn("id", []any{5}).Where("artist2 <> #{name}", "TEST").DoneRowsAffectedContext(timeoutContext)
 	fmt.Println("更新：", affected)
 	if err != nil {
 		fmt.Println(err)

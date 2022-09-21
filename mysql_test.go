@@ -122,7 +122,7 @@ func Test_MYSQL_Update(t *testing.T) {
 	db, _ := initDB()
 	sqlSession := NewTxSession(db, false)
 	id, err := NewMySqlSession(sqlSession).Update("acc_tracking_result").SetSelective("title", "中文测试标题").
-		In("id", []any{-1, -2, -3}).Where("artist <> #{name}", "TEST").DoneRowsAffected()
+		WhereIn("id", []any{-1, -2, -3}).Where("artist <> #{name}", "TEST").DoneRowsAffected()
 	if err != nil {
 		t.Log(err)
 	}
@@ -132,7 +132,7 @@ func Test_MYSQL_Update(t *testing.T) {
 func Test_MYSQL_Delete(t *testing.T) {
 	db, _ := initDB()
 	sqlSession := NewTxSession(db, false)
-	id, err := NewMySqlSession(sqlSession).DeleteFrom("acc_tracking_result").In("id", []any{-156, -157, -158}).DoneRowsAffected()
+	id, err := NewMySqlSession(sqlSession).DeleteFrom("acc_tracking_result").WhereIn("id", []any{-156, -157, -158}).DoneRowsAffected()
 	if err != nil {
 		t.Log(err)
 	}
